@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>管理员界面</title>
+</head>
+<body>
+    <h2>用户列表</h2>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>用户名</th>
+            <th>密码</th>
+        </tr>
+        <tr th:each="user : ${users}">
+            <td th:text="${user.id}"></td>
+            <td th:text="${user.username}"></td>
+            <td th:text="${user.password}"></td>
+        </tr>
+    </table>
+    
+    <h2>新增用户</h2>
+    <form th:action="@{/admin/addUser}" th:object="${newUser}" method="post">
+        <div>
+            <label>用户名:</label>
+            <input type="text" th:field="*{username}" required>
+        </div>
+        <div>
+            <label>密码:</label>
+            <input type="password" th:field="*{password}" required>
+        </div>
+        <button type="submit">添加用户</button>
+    </form>
+</body>
+</html>
