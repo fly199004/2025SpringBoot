@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.model.User;
 import com.example.demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +21,7 @@ public class UserController {
     }
     
     @PostMapping("/register")
+    @CacheEvict(value = "users", allEntries = true)
     public String registerUser(User user) {
         userService.saveUser(user);
         return "redirect:/register?success";
@@ -33,6 +35,7 @@ public class UserController {
     }
     
     @PostMapping("/admin/addUser")
+    @CacheEvict(value = "users", allEntries = true)
     public String addUserFromAdmin(User user) {
         userService.saveUser(user);
         return "redirect:/admin";
