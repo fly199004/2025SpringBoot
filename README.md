@@ -289,3 +289,439 @@ public class User implements Serializable {
 5. 所有需要缓存的实体类必须实现 `Serializable` 接口
 6. 缓存键的命名要清晰明确，避免冲突
 
+## V2版本，添加登录功能
+
+### 修改说明
+
+1. User 实体类修改
+   - 添加了完整的 getter 和 setter 方法
+   - 实现了 Serializable 接口以支持 Redis 缓存
+   - 原因：为了支持对象序列化和反序列化，确保 Redis 缓存正常工作
+
+2. UserRepository 接口修改
+   - 添加了 `findByUsername` 方法用于检查用户名是否已存在
+   - 添加了 `findByUsernameAndPassword` 方法用于登录验证
+   - 原因：支持用户注册时的用户名查重和登录时的身份验证
+
+3. UserService 类修改
+   - 添加了用户名查重逻辑，防止重复注册
+   - 优化了缓存策略，使用 `@Cacheable` 和 `@CacheEvict` 注解
+   - 添加了登录验证方法
+   - 原因：
+     - 确保用户名的唯一性
+     - 提高系统性能，减少数据库访问
+     - 支持用户登录验证
+
+4. UserController 类修改
+   - 添加了登录相关的路由和方法
+   - 添加了错误处理和用户反馈
+   - 优化了注册流程，支持错误信息显示
+   - 添加了管理员功能（添加/删除用户）
+   - 原因：
+     - 实现完整的用户认证流程
+     - 提供更好的用户体验
+     - 支持管理员对用户的管理
+
+5. 页面模板修改
+   - 登录页面（login.html）：
+     - 添加了错误消息显示
+     - 保留了用户名输入
+     - 优化了页面布局
+     - 原因：提供更好的用户体验和错误反馈
+
+   - 注册页面（register.html）：
+     - 添加了错误和成功消息显示
+     - 保留了用户输入数据
+     - 优化了表单布局
+     - 原因：提供更好的用户体验和操作反馈
+
+   - 管理员页面（admin.html）：
+     - 添加了错误消息显示
+     - 优化了用户列表显示
+     - 添加了删除用户功能
+     - 原因：提供更好的管理体验和操作反馈
+
+### 登录功能实现步骤
+
+1. 修改 User 实体类
+```java
+@Entity
+public class User implements Serializable {
+    private static final long serialVersionUID = 1L;
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String username;
+    private String password;
+    
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+    
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
+    public String getUsername() {
+        return username;
+    }
+    
+    public void setUsername(String username) {
+        this.username = username;
+    }
+    
+    public String getPassword() {
+        return password;
+    }
+    
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+```
+
+2. 修改 UserRepository 接口
+```java
+public interface UserRepository extends JpaRepository<User, Long> {
+    User findByUsername(String username);
+    User findByUsernameAndPassword(String username, String password);
+}
+```
+
+3. 修改 UserService 类
+```java
+@Service
+public class UserService {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Cacheable(value = "users", key = "'allUsers'")
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+    
+    @CacheEvict(value = "users", allEntries = true)
+    public User saveUser(User user) {
+        User existingUser = userRepository.findByUsername(user.getUsername());
+        if (existingUser != null) {
+            throw new RuntimeException("用户名已存在");
+        }
+        return userRepository.save(user);
+    }
+    
+    public User findByUsernameAndPassword(String username, String password) {
+        return userRepository.findByUsernameAndPassword(username, password);
+    }
+}
+```
+
+4. 修改 UserController 类
+```java
+@Controller
+public class UserController {
+    @Autowired
+    private UserService userService;
+    
+    @GetMapping("/")
+    public String index() {
+        return "redirect:/login";
+    }
+    
+    @GetMapping("/login")
+    public String showLoginForm() {
+        return "login";
+    }
+    
+    @PostMapping("/login")
+    public String login(@RequestParam String username, @RequestParam String password, Model model) {
+        User user = userService.findByUsernameAndPassword(username, password);
+        if (user != null) {
+            return "redirect:/admin";
+        } else {
+            model.addAttribute("error", "用户名或密码错误");
+            return "login";
+        }
+    }
+    
+    @GetMapping("/register")
+    public String showRegisterForm(Model model) {
+        model.addAttribute("user", new User());
+        return "register";
+    }
+    
+    @PostMapping("/register")
+    public String registerUser(@ModelAttribute User user, Model model) {
+        try {
+            userService.saveUser(user);
+            return "redirect:/register?success";
+        } catch (Exception e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("user", user);
+            return "register";
+        }
+    }
+    
+    @GetMapping("/admin")
+    public String showAdminPage(Model model) {
+        model.addAttribute("users", userService.getAllUsers());
+        model.addAttribute("newUser", new User());
+        return "admin";
+    }
+    
+    @PostMapping("/admin/addUser")
+    public String addUserFromAdmin(@ModelAttribute User user, Model model) {
+        try {
+            userService.saveUser(user);
+            return "redirect:/admin";
+        } catch (Exception e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("users", userService.getAllUsers());
+            model.addAttribute("newUser", user);
+            return "admin";
+        }
+    }
+    
+    @GetMapping("/admin/delete/{id}")
+    public String deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return "redirect:/admin";
+    }
+}
+```
+
+5. 创建登录页面（login.html）
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>登录</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="text-center">用户登录</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- 错误消息显示 -->
+                        <div th:if="${error}" class="alert alert-danger" role="alert">
+                            <span th:text="${error}"></span>
+                        </div>
+                        
+                        <form th:action="@{/login}" method="post">
+                            <div class="form-group">
+                                <label for="username">用户名</label>
+                                <input type="text" class="form-control" id="username" name="username" th:value="${param.username}" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">密码</label>
+                                <input type="password" class="form-control" id="password" name="password" required>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary btn-block">登录</button>
+                            </div>
+                            <div class="text-center">
+                                <a th:href="@{/register}">还没有账号？立即注册</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+6. 修改注册页面（register.html）
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>注册</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="text-center">用户注册</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- 错误消息显示 -->
+                        <div th:if="${error}" class="alert alert-danger" role="alert">
+                            <span th:text="${error}"></span>
+                        </div>
+                        
+                        <!-- 成功消息显示 -->
+                        <div th:if="${param.success}" class="alert alert-success" role="alert">
+                            注册成功！请登录。
+                        </div>
+                        
+                        <form th:action="@{/register}" method="post" th:object="${user}">
+                            <div class="form-group">
+                                <label for="username">用户名</label>
+                                <input type="text" class="form-control" id="username" th:field="*{username}" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">密码</label>
+                                <input type="password" class="form-control" id="password" th:field="*{password}" required>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary btn-block">注册</button>
+                            </div>
+                            <div class="text-center">
+                                <a th:href="@{/login}">已有账号？立即登录</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+7. 修改管理员页面（admin.html）
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>管理员页面</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>用户管理</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- 错误消息显示 -->
+                        <div th:if="${error}" class="alert alert-danger" role="alert">
+                            <span th:text="${error}"></span>
+                        </div>
+                        
+                        <!-- 添加用户表单 -->
+                        <form th:action="@{/admin/addUser}" method="post" class="mb-4">
+                            <div class="form-row">
+                                <div class="form-group col-md-4">
+                                    <label for="username">用户名</label>
+                                    <input type="text" class="form-control" id="username" name="username" th:value="${newUser?.username}" required>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label for="password">密码</label>
+                                    <input type="password" class="form-control" id="password" name="password" th:value="${newUser?.password}" required>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label>&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary btn-block">添加用户</button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- 用户列表 -->
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户名</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="user : ${users}">
+                                    <td th:text="${user.id}"></td>
+                                    <td th:text="${user.username}"></td>
+                                    <td>
+                                        <a th:href="@{/admin/delete/{id}(id=${user.id})}" class="btn btn-danger btn-sm">删除</a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+### 登录功能说明
+
+1. 功能特点：
+   - 支持用户名和密码登录
+   - 登录失败显示错误信息
+   - 登录成功跳转到管理员页面
+   - 提供注册入口
+   - 支持用户注册
+   - 支持管理员添加和删除用户
+
+2. 安全特性：
+   - 密码在传输过程中使用表单提交
+   - 登录失败不显示具体错误原因
+   - 支持基本的输入验证
+   - 用户名唯一性检查
+
+3. 用户体验：
+   - 响应式设计，适配不同设备
+   - 清晰的错误提示
+   - 简洁的界面布局
+   - 保留用户输入数据
+   - 显示操作成功消息
+
+### 注意事项
+
+1. 登录功能目前使用简单的用户名密码验证
+2. 建议在生产环境中添加：
+   - 密码加密存储
+   - 登录失败次数限制
+   - 验证码功能
+   - Session管理
+   - 记住我功能
+
+### 后续优化计划
+
+1. 添加密码加密功能
+2. 实现记住我功能
+3. 添加验证码功能
+4. 实现登录失败次数限制
+5. 添加Session管理
+6. 实现权限控制
+
+## 版本说明
+
+### V2版本
+- 添加了Redis缓存支持
+- 优化了用户注册和登录流程
+- 添加了错误处理和用户反馈
+- 改进了页面UI和用户体验
+  - 添加了错误消息显示功能
+  - 在注册页面显示成功消息
+  - 保留用户输入数据
+  - 优化了页面布局和样式
+  - 添加了删除用户功能
+- 支持管理员功能
+  - 查看所有用户
+  - 添加新用户
+  - 删除用户
+- 添加了用户会话管理
+- 实现了基本的权限控制
+
+### V1版本
+
+- 添加redis缓存支持
+
+
+

@@ -1,34 +1,64 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>管理员界面</title>
+    <title>管理员页面</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 </head>
 <body>
-    <h2>用户列表</h2>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>用户名</th>
-            <th>密码</th>
-        </tr>
-        <tr th:each="user : ${users}">
-            <td th:text="${user.id}"></td>
-            <td th:text="${user.username}"></td>
-            <td th:text="${user.password}"></td>
-        </tr>
-    </table>
-    
-    <h2>新增用户</h2>
-    <form th:action="@{/admin/addUser}" th:object="${newUser}" method="post">
-        <div>
-            <label>用户名:</label>
-            <input type="text" th:field="*{username}" required>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>用户管理</h3>
+                    </div>
+                    <div class="card-body">
+                        <!-- 错误消息显示 -->
+                        <div th:if="${error}" class="alert alert-danger" role="alert">
+                            <span th:text="${error}"></span>
+                        </div>
+                        
+                        <!-- 添加用户表单 -->
+                        <form th:action="@{/admin/addUser}" method="post" class="mb-4">
+                            <div class="form-row">
+                                <div class="form-group col-md-4">
+                                    <label for="username">用户名</label>
+                                    <input type="text" class="form-control" id="username" name="username" th:value="${newUser?.username}" required>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label for="password">密码</label>
+                                    <input type="password" class="form-control" id="password" name="password" th:value="${newUser?.password}" required>
+                                </div>
+                                <div class="form-group col-md-4">
+                                    <label>&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary btn-block">添加用户</button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- 用户列表 -->
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户名</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="user : ${users}">
+                                    <td th:text="${user.id}"></td>
+                                    <td th:text="${user.username}"></td>
+                                    <td>
+                                        <a th:href="@{/admin/delete/{id}(id=${user.id})}" class="btn btn-danger btn-sm">删除</a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div>
-            <label>密码:</label>
-            <input type="password" th:field="*{password}" required>
-        </div>
-        <button type="submit">添加用户</button>
-    </form>
+    </div>
 </body>
 </html>

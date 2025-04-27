@@ -8,11 +8,28 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 public class UserController {
     @Autowired
     private UserService userService;
+    
+    @GetMapping("/login")
+    public String showLoginForm() {
+        return "login";
+    }
+    
+    @PostMapping("/login")
+    public String login(@RequestParam String username, @RequestParam String password, Model model) {
+        User user = userService.findByUsernameAndPassword(username, password);
+        if (user != null) {
+            return "redirect:/admin";
+        } else {
+            model.addAttribute("error", "用户名或密码错误");
+            return "login";
+        }
+    }
     
     @GetMapping("/register")
     public String showRegistrationForm(Model model) {
@@ -22,9 +39,15 @@ public class UserController {
     
     @PostMapping("/register")
     @CacheEvict(value = "users", allEntries = true)
-    public String registerUser(User user) {
-        userService.saveUser(user);
-        return "redirect:/register?success";
+    public String registerUser(User user, Model model) {
+        try {
+            userService.saveUser(user);
+            return "redirect:/register?success";
+        } catch (RuntimeException e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("user", user);
+            return "register";
+        }
     }
     
     @GetMapping("/admin")
@@ -36,8 +59,15 @@ public class UserController {
     
     @PostMapping("/admin/addUser")
     @CacheEvict(value = "users", allEntries = true)
-    public String addUserFromAdmin(User user) {
-        userService.saveUser(user);
-        return "redirect:/admin";
+    public String addUserFromAdmin(User user, Model model) {
+        try {
+            userService.saveUser(user);
+            return "redirect:/admin";
+        } catch (RuntimeException e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("users", userService.getAllUsers());
+            model.addAttribute("newUser", user);
+            return "admin";
+        }
     }
 }
